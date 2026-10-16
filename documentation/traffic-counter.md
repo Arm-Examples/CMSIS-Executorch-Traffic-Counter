@@ -1,4 +1,4 @@
-# Traffic counter with YOLO26n on the Ethos-U55 (AppKit-E7)
+# Traffic counter with Ultralytics YOLO26n on the Ethos-U55 (AppKit-E7)
 
 The vehicles an Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2) sees through its
 camera are detected by Ultralytics YOLO26n on the Ethos-U55-256 next to the

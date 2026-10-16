@@ -1,4 +1,4 @@
-# Traffic counter on the Alif AppKit-E7: YOLO26n on the Ethos-U55
+# Traffic counter on the Alif AppKit-E7: Ultralytics YOLO26n on the Ethos-U55
 
 An Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2) counts the vehicles its camera
 sees. Ultralytics YOLO26n, exported with ExecuTorch and compiled by Vela, runs
@@ -215,6 +215,12 @@ checkpoint `model/yolo26n-noattn-vehicles.pt`, its architecture
 package. `src/LICENSE-ExecuTorch` covers the ExecuTorch sources
 (BSD-3-Clause).
 
+Ultralytics and YOLO are trademarks of Ultralytics Inc. This repository is an
+independent example that uses Ultralytics software; it is not affiliated
+with, sponsored or endorsed by Ultralytics. Product names are written as the
+[Ultralytics brand guidelines](https://www.ultralytics.com/brand) ask
+(YOLO26, YOLO26n), including on the board's panel.
+
 ## Read on
 
 - [documentation/traffic-counter.md](documentation/traffic-counter.md): the
@@ -225,3 +231,5 @@ package. `src/LICENSE-ExecuTorch` covers the ExecuTorch sources
   node, `*.cbuild-mlops.yml` and how the AI layer is made.
 - [documentation/pack-provenance.md](documentation/pack-provenance.md): where
   the `PyTorch::ExecuTorch` pack comes from.
+- [documentation/prompt.md](documentation/prompt.md): the prompt, shortened,
+  that this example was built from with an AI coding agent.

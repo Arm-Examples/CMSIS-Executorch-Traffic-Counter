@@ -74,7 +74,7 @@ void image_score_maps(uint8_t *panel, int x, int y, const detector_scores_t *sco
 /* Filled rectangle on the panel, clipped: [x0, x1) x [y0, y1). */
 void image_fill(uint8_t *panel, int x0, int y0, int x1, int y1, uint32_t rgb);
 
-/* Text in a 5x7 font scaled by `scale` (upper case, digits, " .:%/-+"). Returns the x after it. */
+/* Text in a 5x7 font scaled by `scale` (printable ASCII up to "z", other bytes as "?"). Returns the x after it. */
 int image_text(uint8_t *panel, int x, int y, int scale, const char *text, uint32_t rgb);
 
 #ifdef __cplusplus

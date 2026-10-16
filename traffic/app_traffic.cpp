@@ -280,7 +280,7 @@ void draw_status(uint8_t* fb, const traffic_counts_t& counts, const detector_sco
   image_fill(fb, 0, IMAGE_VIEW_TOP + IMAGE_VIEW, IMAGE_PANEL_W, IMAGE_PANEL_H, 0x000000U);
 
   char line[48];
-  image_text(fb, 12, 6, 2, "TRAFFIC COUNTER  YOLO26N  ETHOS-U55", kDim);
+  image_text(fb, 12, 6, 2, "Traffic counter  YOLO26n  Ethos-U55", kDim);
   snprintf(line, sizeof(line), "%lu", static_cast<unsigned long>(counts.total));
   image_text(fb, 12, 24, 5, line, kWhite);
   const char* dir0 = tracker_line_vertical() ? "RIGHT" : "DOWN";
