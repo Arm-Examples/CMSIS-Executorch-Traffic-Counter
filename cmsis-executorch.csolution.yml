@@ -1,0 +1,139 @@
+# Copyright 2026 Arm Limited and/or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Traffic counter with ExecuTorch on the Ethos-U55: Ultralytics YOLO26n finds
+# the vehicles in each frame, a tracker counts them as they cross a line
+# (traffic/traffic.cproject.yml, documentation/traffic-counter.md). Two
+# targets with the same Cortex-M55 + Ethos-U55-256 pair and the same AI layer:
+# the Alif Ensemble E7 AppKit (target-type AppKit-E7), and the Corstone-300
+# FVP (target-type SSE-300-U55), which runs the detector on the test image
+# without a board. Three steps build it:
+#
+#   cbuild setup cmsis-executorch.csolution.yml --active AppKit-E7
+#   python create_ai_layer.py cmsis-executorch.cbuild-mlops.yml
+#   cbuild cmsis-executorch.csolution.yml --active AppKit-E7
+#
+# The `mlops:` node below makes `cbuild setup` emit the *.cbuild-mlops.yml;
+# create_ai_layer.py reads the NPU and Vela settings from it, exports the model
+# from PyTorch in the project's venv and writes the AI layer.
+solution:
+  created-for: CMSIS-Toolbox@2.14.1
+  cdefault:
+  compiler: AC6
+
+  packs:
+    # Pinned exactly: the pack's C++ runtime and the Python exporter pinned in
+    # requirements.txt must be the same ExecuTorch version, or the .pte fails
+    # to load. `cbuild setup --packs` fetches it from the public index.
+    - pack: PyTorch::ExecuTorch@1.5.1
+    - pack: ARM::CMSIS
+    - pack: ARM::CMSIS-Compiler
+    # BSP of the Corstone-300 FVP target. The layer lists it too; naming it
+    # here keeps the mlops: simulator target resolvable when the AppKit-E7 is
+    # the active target-type.
+    - pack: ARM::V2M_MPS3_SSE_300_BSP@1.5.0
+    # DFP + BSP of the Alif Ensemble E7 AppKit, and the Vela configuration
+    # of its NPUs (ensemble_vela.ini).
+    - pack: AlifSemiconductor::Ensemble@^2.2.0-0
+
+  target-types:
+    # Alif Ensemble E7 AppKit (AK-E7-AIML, Gen 2): the Cortex-M55 HP core with
+    # its Ethos-U55-256, the 480x800 panel, an MT9M114 camera module. The
+    # Secure Enclave has to boot the HP core from its MRAM region:
+    # .alif/M55_HP_mram_cfg_e7.json, the "Install M55_HP debug stubs (AppKit-E7)" task.
+    - type: AppKit-E7
+      board: Alif Semiconductor::AppKit-E7-AIML
+      device: Alif Semiconductor::AE722F80F55D5LS:M55_HP
+      variables:
+        - Board-Layer: $SolutionDir()$/board/AppKit-E7/Board-Traffic.clayer.yml
+        - AI-Layer: $SolutionDir()$/ai_layer/ai_layer.clayer.yml
+      target-set:
+        - set:
+          images:
+            - project-context: traffic.Release
+          debugger:
+            name: J-Link Server
+            # SWD at 4 MHz is the pack's <debugProbe> setting for the Ensemble
+            # kits. With JTAG the generated "CMSIS Load" task blocks on
+            # JLinkExe's interactive JTAG-chain prompt.
+            protocol: swd
+            clock: 4000000
+            start-pname: M55_HP
+
+    # Corstone-300 (SSE-300) with a Cortex-M55 and an Ethos-U55-256, the NPU
+    # configuration of the E7's HP core, simulated on the Arm FVP. No camera,
+    # panel or SDS: the traffic counter runs the test image through the
+    # detector and the tracker for a few frames, prints the detections and
+    # ends the simulation (board/Corstone-300/Board-Traffic.clayer.yml).
+    - type: SSE-300-U55
+      board: ARM::V2M-MPS3-SSE-300-FVP
+      device: ARM::SSE-300-MPS3
+      variables:
+        - Board-Layer: $SolutionDir()$/board/Corstone-300/Board-Traffic.clayer.yml
+        - AI-Layer: $SolutionDir()$/ai_layer/ai_layer.clayer.yml
+      target-set:
+        - set:
+          images:
+            - project-context: traffic.Release
+          debugger:
+            name: Arm-FVP
+            # The model is its own GDB server (plugins/GDBServer.so, MDK FVP
+            # models 11.32.23+). fvp.sh resolves that plugin when VS Code was
+            # not started from a `vcpkg activate` shell, line-buffers the
+            # model's stdout so the debug adapter sees the "Listening" banner,
+            # and on macOS runs the model in Docker (Arm ships no macOS build).
+            # On Windows point this straight at FVP_Corstone_SSE-300_Ethos-U55.exe.
+            model: ${workspaceFolder}/.vscode/fvp.sh
+            config-file: board/Corstone-300/fvp_config.txt
+            args: "--simlimit 600"
+
+  misc:
+    # CMSIS-Toolbox 2.14.1 passes -mfpu=fpv5-sp-d16 to Clang for the Cortex-M55,
+    # a single-precision FPU on a core with a double-precision one and MVE;
+    # LLVM crashes on some kernels with that combination. The later option
+    # wins, so name the FPU explicitly (newer toolboxes leave it to -mcpu).
+    - for-compiler: CLANG
+      C-CPP:
+        - -mfpu=fp-armv8-fullfp16-d16
+      ASM:
+        - -mfpu=fp-armv8-fullfp16-d16
+
+  build-types:
+    - type: Debug
+      debug: on
+      optimize: debug
+    # Everything at full optimization, the packs' sources included (ExecuTorch
+    # runtime, Ethos-U driver, RTX, Alif drivers are -O1 in Debug). Debug
+    # information stays on: it costs nothing on the target.
+    - type: Release
+      debug: on
+      optimize: speed
+
+  projects:
+    - project: ./traffic/traffic.cproject.yml
+
+  # MLOps information: exported to cmsis-executorch.cbuild-mlops.yml by
+  # `cbuild setup ... --active AppKit-E7`. Retarget the NPU here and
+  # create_ai_layer.py picks it up on its next run. The FVP's Ethos-U55-256
+  # runs the same command stream; Vela's system configuration only steers the
+  # scheduling for the E7's memories.
+  # https://open-cmsis-pack.github.io/cmsis-toolbox/build-overview/#mlops-information
+  mlops:
+    description: YOLO26n vehicle detector of the traffic counter for the Ethos-U55
+      of the Ensemble E7's M55-HP
+    npu:
+      type: Ethos-U55
+    vela:
+      # With the Ensemble pack in the solution, cbuild setup copies its Vela
+      # configuration to .cmsis/ensemble_vela.ini and emits it, together with
+      # --accelerator-config ethos-u55-256. RTSS_HP_SRAM_MRAM is the HP core's
+      # NPU in that file: the scratch in the SRAM, the weights in the MRAM.
+      system: RTSS_HP_SRAM_MRAM
+      memory: Shared_Sram
+    model:
+      clayer: $AI-Layer$
+      name: TrafficVehicles
+    hardware:
+      target: AppKit-E7 # named explicitly: the released 2.14.1 detects no hardware target
+    simulator:
+      target: SSE-300-U55
