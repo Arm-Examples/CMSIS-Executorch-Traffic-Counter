@@ -30,6 +30,77 @@ and Ethos-U55-256:
 Both use the same AI layer, `ai_layer/`. The full technical description of
 the traffic counter is [documentation/traffic-counter.md](documentation/traffic-counter.md).
 
+## The prompt behind this example
+
+The example was built with an AI coding agent in VS Code (Keil Studio with
+the CMSIS Developer Assistant, Claude Code) over about two weeks: every
+step was built, loaded and checked on the board, and what the measurements
+said shaped the next step. This is that conversation reduced to one prompt,
+simplified and shortened; the commit messages record the actual steps.
+
+> Fork the Arm example `cmsis-executorch` (ExecuTorch on the Ethos-U
+> through a CMSIS solution) into a traffic counter for the Alif Ensemble E7
+> AppKit: Cortex-M55 HP core with the Ethos-U55-256, the kit's MIPI camera
+> and its panel.
+>
+> **Model.** Use Ultralytics YOLO26n. Cut it at its NMS-free one-to-one
+> head, keep the five COCO vehicle classes, export it with ExecuTorch's Arm
+> backend and compile it with Vela for the Ethos-U55-256 so that every
+> operator runs on the NPU; input 416x416 RGB888, int8 calibrated on the
+> COCO128 images, outputs anchor-major so that Vela adds no transposes.
+> Keep to the repository's export flow (`create_ai_layer.py` from the
+> solution's `mlops:` node), no custom passes or patched backend. Measure
+> the NPU time on the board with its PMU and fix the bottleneck you find,
+> not the one you expect: if the attention blocks are what the U55 cannot
+> do well, run them on the CPU, or train a variant without them on the
+> COCO images with vehicles and compare the vehicle AP50 of float and int8.
+>
+> **Application.** A small tracker on the Cortex-M55 matches detections to
+> tracks by IoU with a constant-velocity prediction, confirms a track after
+> three detections and counts it once, per class and direction, when its
+> centre crosses a line on the picture. The panel shows the picture, the
+> boxes, the line and the tallies; the joystick moves the line and its
+> centre button turns it. Convert the camera frame while the NPU works on
+> the previous one. The console is a log buffer in the DTCM that the
+> debugger reads, not a UART.
+>
+> **Camera.** Bring the kit's camera up on the E7 (probe it over I2C to
+> find out what module it is before writing a driver), one snapshot per
+> frame into SRAM0, with the gain following the picture's brightness.
+>
+> **Recording.** Over the board's User USB, use the SDS-Framework to record
+> the model inputs and the detections, to play a recorded clip or a video
+> back into the detector instead of the camera, to record the panel for a
+> video, and to compare the board's detections with the float model's on
+> the host.
+>
+> **Without a board.** Add a Corstone-300 FVP target with the same AI
+> layer that runs the test image through the detector and the tracker and
+> ends with `Test_result: PASS`, and a GitHub Actions workflow that exports
+> the AI layer from a fresh clone, builds both targets and runs the FVP.
+>
+> **Rules.** Talk to the board only through the CMSIS Developer Assistant
+> tools, never through a shell debugger. Validate every step on the board
+> and keep the firmware identical when a change is only a refactor. Do not
+> power-cycle or replug the board when a tool can do the job. Keep the
+> licences straight (Apache-2.0 code, the YOLO26n weights under
+> Ultralytics' AGPL-3.0, ExecuTorch under BSD-3-Clause, no image in the
+> repository that is not ours to redistribute). Write a README and a
+> technical document that someone with the kit can follow from an empty
+> machine, with the measurements, the memory map and what went wrong on
+> the way.
+
+What the answers turned into: the attention of YOLO26n's two PSA blocks took
+50 of 80 ms on the Ethos-U55 (no matrix multiply, the PMU showed its AXI
+port saturated), so first the attention moved to the CPU between three NPU
+methods, then YOLO26n without attention was fine-tuned on the COCO images
+with vehicles, 31 ms per frame and a better vehicle AP50. The kit's camera
+was an MT9M114, not the module the pack's layer named, and the E7's camera
+and display DMA do not reach SRAM1. SDS went from J-Link RTT to the User
+USB once its buffers sat in the non-secure DTCM region. The repository was
+then cut down to the traffic counter alone, with the weights and the pack
+lock file committed so that a clone builds the same image.
+
 ## 1. Host tools
 
 1. [VS Code](https://code.visualstudio.com/) with the extensions **Keil
@@ -231,5 +302,3 @@ with, sponsored or endorsed by Ultralytics. Product names are written as the
   node, `*.cbuild-mlops.yml` and how the AI layer is made.
 - [documentation/pack-provenance.md](documentation/pack-provenance.md): where
   the `PyTorch::ExecuTorch` pack comes from.
-- [documentation/prompt.md](documentation/prompt.md): the prompt, shortened,
-  that this example was built from with an AI coding agent.
