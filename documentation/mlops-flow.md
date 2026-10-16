@@ -148,3 +148,25 @@ step 3.
   ```
 
   The Python side needs no changes at all.
+- **A second NPU next to the first:** the csolution has one `mlops:` node,
+  so a second AI layer gets its MLOps information written by hand in the
+  format `cbuild setup` emits. The Corstone-320 simulator target
+  (`SSE-320-sim`, Ethos-U85-256) links `ai_layer_u85/`, made from
+  `cmsis-executorch-u85.cbuild-mlops.yml` in the solution directory:
+
+  ```yaml
+  cbuild-mlops:
+    npu:
+      type: Ethos-U85
+      macs: 256
+    vela:
+      options: --accelerator-config ethos-u85-256 --system-config Ethos_U85_SYS_DRAM_Mid --memory-mode Shared_Sram
+    model:
+      clayer: ai_layer_u85/ai_layer.clayer.yml
+      name: TrafficVehicles
+  ```
+
+  `python create_ai_layer.py cmsis-executorch-u85.cbuild-mlops.yml` is step
+  2 for it; the ExecuTorch pack version comes from the csolution's pin next
+  to the file. Without a `vela.ini` the system configuration and memory mode
+  are Vela's own.

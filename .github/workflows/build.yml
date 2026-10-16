@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # CI for the three-step flow (cbuild setup, create_ai_layer.py, cbuild): the
-# AI layer exported from a fresh clone, the traffic counter built for the
-# AppKit-E7 and for the Corstone-300 FVP, and run on the FVP.
+# AI layers exported from a fresh clone, the traffic counter built for the
+# AppKit-E7, for the Corstone-300 FVP and for the Corstone-320 simulator,
+# and run on the FVP and on the simulator.
 name: Build and Run
 
 on:
@@ -21,7 +22,7 @@ jobs:
   # across hosts is not cheap. AC6 only: the AppKit-E7's scatter file and the
   # FVP layer's semihosting exit are written for Arm Compiler 6.
   build-and-run:
-    name: Export, build for AppKit-E7 and SSE-300-U55, run on the FVP
+    name: Export, build for AppKit-E7, SSE-300-U55 and SSE-320-sim, run on the FVP and the simulator
     runs-on: ubuntu-latest
 
     steps:
@@ -69,10 +70,11 @@ jobs:
       - name: Generate the MLOps information
         run: cbuild setup ${SOLUTION}.csolution.yml --active AppKit-E7 --packs
 
-      - name: Create the AI layer
+      - name: Create the AI layers
         run: |
           .venv/bin/python create_ai_layer.py ${SOLUTION}.cbuild-mlops.yml
-          git diff --stat -- ai_layer/
+          .venv/bin/python create_ai_layer.py ${SOLUTION}-u85.cbuild-mlops.yml
+          git diff --stat -- ai_layer/ ai_layer_u85/
 
       - name: Build for the AppKit-E7
         run: cbuild ${SOLUTION}.csolution.yml --active AppKit-E7 --packs
@@ -95,6 +97,30 @@ jobs:
           echo "Checking simulation output"
           grep -q "Test_result: PASS" fvp_stdout.log
 
+      - name: Build for the Corstone-320 simulator
+        run: cbuild ${SOLUTION}.csolution.yml --active SSE-320-sim --packs
+
+      # The simulator is a release of github.com/MatthiasHertelArm/corstone-320-sim;
+      # it serves the semihosting console and exit() itself, and the
+      # application's exit code is its own.
+      - name: Run on the Corstone-320 simulator
+        env:
+          CS320SIM_VERSION: v0.2.0
+        run: |
+          mkdir -p cs320sim && cd cs320sim
+          curl -sSfL -O "https://github.com/MatthiasHertelArm/corstone-320-sim/releases/download/${CS320SIM_VERSION}/cs320sim-${CS320SIM_VERSION}-linux-x64.tar.gz"
+          curl -sSfL -O "https://github.com/MatthiasHertelArm/corstone-320-sim/releases/download/${CS320SIM_VERSION}/SHA256SUMS"
+          sha256sum --check --ignore-missing SHA256SUMS
+          tar xzf "cs320sim-${CS320SIM_VERSION}-linux-x64.tar.gz"
+          cd ..
+          "cs320sim/cs320sim-${CS320SIM_VERSION}-linux-x64/cs320sim" \
+              out/traffic/SSE-320-sim/Release/traffic.axf \
+              --headless --semihosting --speed max --time 600 \
+              | tee sim_stdout.log
+
+          echo "Checking simulation output"
+          grep -q "Test_result: PASS" sim_stdout.log
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,9 +128,11 @@ jobs:
           name: traffic-counter
           path: |
             fvp_stdout.log
+            sim_stdout.log
             out/**/*.axf
             out/**/*.hex
             ai_layer/
+            ai_layer_u85/
 
   # The export flow must work on all three host OSes -- that is the point of a
   # venv-based (rather than Docker-based) model build. No FVP and no Arm

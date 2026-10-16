@@ -14,6 +14,9 @@ cbuild-pack:
     - resolved-pack: ARM::SDS@3.1.0
       selected-by-pack:
         - ARM::SDS@^3.1.0
+    - resolved-pack: ARM::SSE_320_BSP@1.1.0
+      selected-by-pack:
+        - ARM::SSE_320_BSP@1.1.0
     - resolved-pack: ARM::V2M_MPS3_SSE_300_BSP@1.5.0
       selected-by-pack:
         - ARM::V2M_MPS3_SSE_300_BSP@1.5.0

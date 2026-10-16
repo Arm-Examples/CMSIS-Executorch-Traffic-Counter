@@ -7,7 +7,9 @@
 # targets with the same Cortex-M55 + Ethos-U55-256 pair and the same AI layer:
 # the Alif Ensemble E7 AppKit (target-type AppKit-E7), and the Corstone-300
 # FVP (target-type SSE-300-U55), which runs the detector on the test image
-# without a board. Three steps build it:
+# without a board. A third, SSE-320-sim, runs the same on the Corstone-320
+# simulator cs320sim (Cortex-M85 + Ethos-U85-256) with a second export of
+# the model, ai_layer_u85/. Three steps build it:
 #
 #   cbuild setup cmsis-executorch.csolution.yml --active AppKit-E7
 #   python create_ai_layer.py cmsis-executorch.cbuild-mlops.yml
@@ -32,6 +34,8 @@ solution:
     # here keeps the mlops: simulator target resolvable when the AppKit-E7 is
     # the active target-type.
     - pack: ARM::V2M_MPS3_SSE_300_BSP@1.5.0
+    # BSP of the Corstone-320 simulator target (the SSE-320 FVP's device).
+    - pack: ARM::SSE_320_BSP@1.1.0
     # DFP + BSP of the Alif Ensemble E7 AppKit, and the Vela configuration
     # of its NPUs (ensemble_vela.ini).
     - pack: AlifSemiconductor::Ensemble@^2.2.0-0
@@ -86,6 +90,27 @@ solution:
             model: ${workspaceFolder}/.vscode/fvp.sh
             config-file: board/Corstone-300/fvp_config.txt
             args: "--simlimit 600"
+
+    # Corstone-320 (SSE-320) with a Cortex-M85 and an Ethos-U85-256 on the
+    # Corstone-320 simulator, cs320sim (a native GDB server for the CMSIS
+    # Debugger on Linux, macOS and Windows; no Docker, no FVP license):
+    # https://github.com/MatthiasHertelArm/corstone-320-sim. The same
+    # headless run as on the Corstone-300, with the model exported for the
+    # Ethos-U85 (ai_layer_u85/, cmsis-executorch-u85.cbuild-mlops.yml).
+    # The debugger is the simulator's CMSIS debug adapter, registered once
+    # with `cs320sim register-cmsis-adapter --apply`.
+    - type: SSE-320-sim
+      board: ARM::SSE-320
+      device: ARM::SSE-320-FVP
+      variables:
+        - Board-Layer: $SolutionDir()$/board/Corstone-320/Board-Traffic.clayer.yml
+        - AI-Layer: $SolutionDir()$/ai_layer_u85/ai_layer.clayer.yml
+      target-set:
+        - set:
+          images:
+            - project-context: traffic.Release
+          debugger:
+            name: corstone-320-sim
 
   misc:
     # CMSIS-Toolbox 2.14.1 passes -mfpu=fpv5-sp-d16 to Clang for the Cortex-M55,

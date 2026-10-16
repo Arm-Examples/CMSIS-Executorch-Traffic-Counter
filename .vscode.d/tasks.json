@@ -49,6 +49,23 @@
             "problemMatcher": []
         },
         {
+            "label": "Create AI layer (Ethos-U85, Corstone-320 simulator)",
+            "detail": "Export model/traffic.py for the Ethos-U85-256 in cmsis-executorch-u85.cbuild-mlops.yml (hand-written) and write ai_layer_u85/, the AI layer of the SSE-320-sim target",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "create_ai_layer.py",
+                "cmsis-executorch-u85.cbuild-mlops.yml"
+            ],
+            "windows": {
+                "command": "python"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Alif: Install M55_HP debug stubs (AppKit-E7, single core configuration)",
             "detail": "Programs the ATOC/MRAM stubs with Alif SETOOLS for the AppKit-E7's device (AE722F80F55D5LS), so that the Secure Enclave boots the HP core from its MRAM region and J-Link can load and debug it. The AppKit-E7 is silicon revision B4 (tools-config -p resets it to A0, and every later step then says 'Revision is invalid'). Set SW4 to SEUART, set 'alif.setools.root' in your VS Code settings.",
             "type": "shell",

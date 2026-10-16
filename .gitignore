@@ -19,6 +19,8 @@ tmp/
 # AppKit-E7 build was validated with (its RTE config files are from them).
 !/cmsis-executorch.cbuild-pack.yml
 *.cbuild-mlops.yml
+# The hand-written MLOps information of the Ethos-U85 export (ai_layer_u85/).
+!/cmsis-executorch-u85.cbuild-mlops.yml
 *.update@*
 .cmd.jlink
 

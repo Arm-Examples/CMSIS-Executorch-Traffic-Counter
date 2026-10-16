@@ -26,11 +26,12 @@
  * `traffic_status`; `traffic_reset_counts` set to 1 by the debugger zeroes
  * the tallies.
  *
- * On the Corstone-300 FVP (target-type SSE-300-U55) there is no camera,
- * panel, joystick or SDS: the board layer leaves out their APP_HAS_* defines
- * and sets TRAFFIC_FRAMES, so the test image goes through the detector and
- * the tracker that many times, each frame's detections go to the console,
- * and exit() ends the simulation.
+ * On the Corstone-300 FVP (target-type SSE-300-U55) and the Corstone-320
+ * simulator (SSE-320-sim, Ethos-U85) there is no camera, panel, joystick or
+ * SDS: the board layer leaves out their APP_HAS_* defines and sets
+ * TRAFFIC_FRAMES, so the test image goes through the detector and the
+ * tracker that many times, each frame's detections go to the console, and
+ * exit() ends the simulation.
  */
 
 #include <cstdint>
@@ -433,10 +434,16 @@ __NO_RETURN void joystick_thread(void*) {
 #endif
 extern "C" volatile int traffic_camera_enable = TRAFFIC_CAMERA_AUTOSTART;
 
+#if defined(ETHOSU85)
+#define TRAFFIC_NPU_NAME "Ethos-U85"
+#else
+#define TRAFFIC_NPU_NAME "Ethos-U55"
+#endif
+
 extern "C" int app_main(void) {
   setvbuf(stdout, nullptr, _IONBF, 0);
   memset(const_cast<TrafficStatus*>(&traffic_status), 0, sizeof(traffic_status));
-  printf("Traffic counter: YOLO26n on the Ethos-U55, input %dx%d RGB888, core %lu MHz, line at %d %s\n", kSize, kSize,
+  printf("Traffic counter: YOLO26n on the " TRAFFIC_NPU_NAME ", input %dx%d RGB888, core %lu MHz, line at %d %s\n", kSize, kSize,
          static_cast<unsigned long>(SystemCoreClock / 1000000U), TRAFFIC_LINE_POS,
          TRAFFIC_LINE_VERTICAL ? "vertical" : "horizontal");
 

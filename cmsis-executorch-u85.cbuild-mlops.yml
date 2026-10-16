@@ -1,0 +1,25 @@
+# Written by hand (the csolution has one mlops: node, and that describes the
+# Ethos-U55 of the AppKit-E7): the Ethos-U85-256 of the Corstone-320, in the
+# format `cbuild setup` emits, so that the unchanged create_ai_layer.py
+# writes the second AI layer of the traffic counter, the one the Corstone-320
+# simulator target (SSE-320-sim) links, into ai_layer_u85/:
+#
+#   python create_ai_layer.py cmsis-executorch-u85.cbuild-mlops.yml
+#
+# create_ai_layer.py reads the ExecuTorch pack version from the csolution's
+# pin, next to this file. Ethos_U85_SYS_DRAM_Mid and Shared_Sram are Vela's
+# own configurations (its vela.ini): the weights in the DRAM, the scratch in
+# the SRAM, the layout of the AppKit-E7 export; the simulator does not time
+# memory, so they only steer the scheduling.
+cbuild-mlops:
+  description: YOLO26n vehicle detector of the traffic counter for the Ethos-U85 of the Corstone-320
+  processor:
+    type: Cortex-M85
+  npu:
+    type: Ethos-U85
+    macs: 256
+  vela:
+    options: --accelerator-config ethos-u85-256 --system-config Ethos_U85_SYS_DRAM_Mid --memory-mode Shared_Sram
+  model:
+    clayer: ai_layer_u85/ai_layer.clayer.yml
+    name: TrafficVehicles

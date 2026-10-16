@@ -168,6 +168,38 @@ In VS Code, **Run** and **Debug** in the CMSIS view do the same with
 (the image is built on first use, `.vscode/fvp.Dockerfile`). The FVP needs an
 Arm user-based license (the Keil MDK Community license is enough).
 
+### On the Corstone-320 simulator
+
+The target-type `SSE-320-sim` is the same run on the Corstone-320, a
+Cortex-M85 with an Ethos-U85-256, simulated by
+[cs320sim](https://github.com/MatthiasHertelArm/corstone-320-sim): an
+instruction-set simulator of the SSE-320 subsystem and the MPS4 board that
+runs natively on Linux, macOS and Windows, serves the CMSIS Debugger as a
+GDB server, and needs neither Docker nor an FVP license. Its board layer
+([`board/Corstone-320/`](../board/Corstone-320/)) is the Corstone-300's with
+the SSE-320 BSP, the U85 driver and the same DDR4 layout
+(`regions_SSE-320.h`; the simulator takes the reset vector table from the
+image). The Ethos-U85 runs another command stream than the U55, so the target
+links a second AI layer, [`ai_layer_u85/`](../ai_layer_u85/), the same model
+exported for `ethos-u85-256` from the hand-written MLOps information
+`cmsis-executorch-u85.cbuild-mlops.yml` (the csolution's `mlops:` node
+describes the E7's U55; see [mlops-flow.md](mlops-flow.md)). Vela puts all
+141 operators on the NPU, with the same 1.2 MB scratch as on the U55.
+
+```bash
+.venv/bin/python create_ai_layer.py cmsis-executorch-u85.cbuild-mlops.yml   # after a model change
+cbuild cmsis-executorch.csolution.yml --active SSE-320-sim --packs
+cs320sim out/traffic/SSE-320-sim/Release/traffic.axf --headless --semihosting --speed max
+```
+
+Semihosting serves the console and `exit()`, whose code becomes the
+simulator's exit code. In VS Code the simulator's debug adapter (registered
+once with `cs320sim register-cmsis-adapter --apply`) provides **Run** and
+**Debug**; its **Simulation** settings choose the speed, the board window and
+the camera source. The simulator keeps the FVP's clock rates (a 25 MHz
+Cortex-M85), and its NPU time is an estimate on the NPU's own clock, not a
+measurement of a board.
+
 ## The pipeline
 
 | Step | Where |

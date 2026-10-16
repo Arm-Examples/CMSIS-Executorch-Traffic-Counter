@@ -19,16 +19,18 @@ plays a recorded clip back into the detector instead of the camera.
 The repository is a fork of the Arm example
 [cmsis-executorch](https://github.com/Arm-Examples/cmsis-executorch): one CMSIS
 solution, `cmsis-executorch.csolution.yml`, with one project,
-`traffic/traffic.cproject.yml`, and two target-types with the same Cortex-M55
-and Ethos-U55-256:
+`traffic/traffic.cproject.yml`, and three target-types:
 
 | Target-type | Hardware | Runs |
 |-------------|----------|------|
-| **AppKit-E7** | Alif Ensemble E7 AppKit, M55 HP core | the traffic counter: camera, panel, joystick, SDS |
-| **SSE-300-U55** | Corstone-300 on the Arm FVP | the detector and the tracker on the test image, without a board |
+| **AppKit-E7** | Alif Ensemble E7 AppKit, M55 HP core with the Ethos-U55-256 | the traffic counter: camera, panel, joystick, SDS |
+| **SSE-300-U55** | Corstone-300 (Cortex-M55, Ethos-U55-256) on the Arm FVP | the detector and the tracker on the test image, without a board |
+| **SSE-320-sim** | Corstone-320 (Cortex-M85, Ethos-U85-256) on the [Corstone-320 simulator](https://github.com/MatthiasHertelArm/corstone-320-sim) | the same, natively on Linux, macOS and Windows |
 
-Both use the same AI layer, `ai_layer/`. The full technical description of
-the traffic counter is [documentation/traffic-counter.md](documentation/traffic-counter.md).
+The first two use the same AI layer, `ai_layer/`; the simulator target links
+`ai_layer_u85/`, the same model exported for the Ethos-U85. The full technical
+description of the traffic counter is
+[documentation/traffic-counter.md](documentation/traffic-counter.md).
 
 ## The prompts behind this example
 
@@ -81,6 +83,16 @@ The second optimized it:
    `vcpkg-configuration.json` on Linux and Windows. On macOS, where Arm ships
    no FVP build, `.vscode/fvp.sh` runs the Linux FVP in Docker, so Docker has
    to be running.
+6. For the Corstone-320 simulator only: `cs320sim` from the
+   [v0.2.0 release](https://github.com/MatthiasHertelArm/corstone-320-sim/releases/tag/v0.2.0)
+   (one archive per host; on macOS clear the quarantine attribute,
+   `xattr -d com.apple.quarantine cs320sim`), on the `PATH`. Register its
+   debug adapter with the CMSIS Solution extension once, and again after an
+   extension update:
+
+   ```bash
+   cs320sim register-cmsis-adapter --apply --backup-dir ~/cs320sim-backup
+   ```
 
 ## 2. Board
 
@@ -113,9 +125,18 @@ cbuild setup cmsis-executorch.csolution.yml --active AppKit-E7 --packs
 .venv/bin/python create_ai_layer.py cmsis-executorch.cbuild-mlops.yml
 ```
 
+`ai_layer_u85/`, the export of the same model for the Ethos-U85 of the
+simulator target, is committed too; its MLOps information is written by
+hand, `cmsis-executorch-u85.cbuild-mlops.yml`:
+
+```bash
+.venv/bin/python create_ai_layer.py cmsis-executorch-u85.cbuild-mlops.yml
+```
+
 Open the folder in VS Code and accept the pack installation
 (`PyTorch::ExecuTorch`, `AlifSemiconductor::Ensemble`, `ARM::SDS`,
-`Keil::MDK-Middleware`, and `ARM::V2M_MPS3_SSE_300_BSP` for the FVP). In the CMSIS view open **Manage Solution**, choose
+`Keil::MDK-Middleware`, `ARM::V2M_MPS3_SSE_300_BSP` for the FVP and
+`ARM::SSE_320_BSP` for the simulator). In the CMSIS view open **Manage Solution**, choose
 the target-type **AppKit-E7** and click **Apply**, then **Build**. From the
 command line:
 
@@ -186,6 +207,26 @@ FVP_Corstone_SSE-300_Ethos-U55 -f board/Corstone-300/fvp_config.txt -a out/traff
 (`.vscode/fvp.sh` in place of the model name on macOS.) The FVP's times are
 not the board's: its NPU runs in fast mode.
 
+### The Corstone-320 simulator
+
+The target-type **SSE-320-sim** runs the same test-image run on a Cortex-M85
+with an Ethos-U85-256, simulated natively by `cs320sim` (host tool 6): no
+Docker, no FVP license. Choose it in **Manage Solution**, **Build**, then
+**Run** (the simulator's "CMSIS Run" task) or **Debug** ("Corstone-320
+simulator (launch)", which stops at `main`). The output, the same lines as on
+the FVP, is on the simulator's console in the terminal; the **Simulation**
+settings of the debugger choose the speed, the board window and the camera
+source. From the command line:
+
+```bash
+cbuild cmsis-executorch.csolution.yml --active SSE-320-sim --packs
+cs320sim out/traffic/SSE-320-sim/Release/traffic.axf --headless --semihosting --speed max
+```
+
+The application's exit code is the simulator's. The simulator keeps the
+FVP's clock rates, so the CPU times are those of a 25 MHz Cortex-M85; its NPU
+time is an estimate, not the FVP's and not a board's.
+
 ## 7. Record and play back (SDS)
 
 With the application running and the User USB connected, these VS Code tasks
@@ -250,6 +291,6 @@ with, sponsored or endorsed by Ultralytics. Product names are written as the
   camera bring-up on the E7, SDS over USB, NPU performance and its PMU
   counters).
 - [documentation/mlops-flow.md](documentation/mlops-flow.md): the `mlops:`
-  node, `*.cbuild-mlops.yml` and how the AI layer is made.
+  node, `*.cbuild-mlops.yml` and how the AI layers are made.
 - [documentation/pack-provenance.md](documentation/pack-provenance.md): where
   the `PyTorch::ExecuTorch` pack comes from.

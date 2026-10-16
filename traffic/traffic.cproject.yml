@@ -10,15 +10,17 @@
 # by a small tracker and counted, per class and direction, as they cross a
 # line on the picture; the panel shows the picture, the boxes, the line and
 # the tallies. SDS records and plays back the model input. On the
-# Corstone-300 FVP (SSE-300-U55) the same application runs the test image
-# through the detector and the tracker without camera, panel or SDS. See
-# documentation/traffic-counter.md.
+# Corstone-300 FVP (SSE-300-U55) and on the Corstone-320 simulator
+# (SSE-320-sim, Ethos-U85 with its own export of the model, ai_layer_u85/)
+# the same application runs the test image through the detector and the
+# tracker without camera, panel or SDS. See documentation/traffic-counter.md.
 #
 # Before the first build:
 #   python traffic/make_test_image.py
 # After a change to model/traffic.py (the AI layer ai_layer/ is committed):
 #   cbuild setup cmsis-executorch.csolution.yml --active AppKit-E7
 #   python create_ai_layer.py cmsis-executorch.cbuild-mlops.yml
+#   python create_ai_layer.py cmsis-executorch-u85.cbuild-mlops.yml   # ai_layer_u85/
 project:
   packs:
     - pack: PyTorch::ExecuTorch@1.5.1
