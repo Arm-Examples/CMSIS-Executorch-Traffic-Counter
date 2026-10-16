@@ -1,0 +1,166 @@
+# Copyright 2026 Arm Limited and/or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
+#
+# CI for the three-step flow (cbuild setup, create_ai_layer.py, cbuild): the
+# AI layer exported from a fresh clone, the traffic counter built for the
+# AppKit-E7 and for the Corstone-300 FVP, and run on the FVP.
+name: Build and Run
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  SOLUTION: cmsis-executorch
+
+jobs:
+  # Linux only: the FVP needs an Arm user-based license, so matrixing this
+  # across hosts is not cheap. AC6 only: the AppKit-E7's scatter file and the
+  # FVP layer's semihosting exit are written for Arm Compiler 6.
+  build-and-run:
+    name: Export, build for AppKit-E7 and SSE-300-U55, run on the FVP
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Install tools
+        uses: ARM-software/cmsis-actions/vcpkg@v1
+
+      - name: Activate Arm tool license
+        uses: ARM-software/cmsis-actions/armlm@v1
+
+      # The FVP loads the runner's libpython3.11, whose standard library is
+      # not where that build's prefix says; the model then dies at start-up
+      # with "Fatal Python error: init_fs_encoding". PYTHONHOME (set on the
+      # FVP step only) points it at a complete Python 3.11.
+      - name: Set up Python 3.11 for the FVP
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache packs
+        uses: actions/cache@v6
+        with:
+          key: cmsis-packs-${{ hashFiles('*.csolution.yml') }}
+          path: /home/runner/.cache/arm/packs
+
+      # torch + executorch is a multi-gigabyte install and otherwise dominates
+      # the job. Keyed on the requirements files so a pin change rebuilds it.
+      - name: Cache model-export venv
+        uses: actions/cache@v6
+        with:
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'setup_venv.py') }}-ultralytics
+          path: .venv
+
+      - name: Create model-export venv
+        run: |
+          ./setup_venv.sh
+          .venv/bin/python -m pip install ultralytics
+
+      # From a COCO photo that is not ours to redistribute, so not committed.
+      - name: Make the test image
+        run: .venv/bin/python traffic/make_test_image.py
+
+      - name: Generate the MLOps information
+        run: cbuild setup ${SOLUTION}.csolution.yml --active AppKit-E7 --packs
+
+      - name: Create the AI layer
+        run: |
+          .venv/bin/python create_ai_layer.py ${SOLUTION}.cbuild-mlops.yml
+          git diff --stat -- ai_layer/
+
+      - name: Build for the AppKit-E7
+        run: cbuild ${SOLUTION}.csolution.yml --active AppKit-E7 --packs
+
+      - name: Build for the Corstone-300 FVP
+        run: cbuild ${SOLUTION}.csolution.yml --active SSE-300-U55 --packs
+
+      - name: Run on the FVP
+        env:
+          PYTHONHOME: ${{ env.pythonLocation }}
+        run: |
+          # stdio is retargeted to semihosting, so the output arrives on the
+          # FVP's own stdout; the application's exit() ends the simulation.
+          FVP_Corstone_SSE-300_Ethos-U55 \
+              -f board/Corstone-300/fvp_config.txt \
+              -a out/traffic/SSE-300-U55/Release/traffic.axf \
+              --simlimit 600 --stat \
+              | tee fvp_stdout.log
+
+          echo "Checking simulation output"
+          grep -q "Test_result: PASS" fvp_stdout.log
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traffic-counter
+          path: |
+            fvp_stdout.log
+            out/**/*.axf
+            out/**/*.hex
+            ai_layer/
+
+  # The export flow must work on all three host OSes -- that is the point of a
+  # venv-based (rather than Docker-based) model build. No FVP and no Arm
+  # license needed, so this is cheap to matrix. Without this job, Windows
+  # support regresses on the first refactor and nobody notices.
+  venv-cross-platform:
+    name: Model export venv (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create model-export venv (POSIX)
+        if: runner.os != 'Windows'
+        run: ./setup_venv.sh
+
+      - name: Create model-export venv (Windows)
+        if: runner.os == 'Windows'
+        run: .\setup_venv.bat
+
+      - name: Check the export entry point
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+              PY=.venv/Scripts/python.exe
+          else
+              PY=.venv/bin/python
+          fi
+          "${PY}" -c "import executorch.backends.arm.quantizer.quantization_annotator; print('arm quantizer OK')"
+          # No cbuild-mlops.yml without cbuild; importing the script checks
+          # that it parses under this interpreter.
+          "${PY}" -c "import create_ai_layer; print('create_ai_layer.py OK')"
+
+      - name: Report resolved versions
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+              PY=.venv/Scripts/python.exe
+          else
+              PY=.venv/bin/python
+          fi
+          "${PY}" -m pip list | grep -iE "torch|executorch|vela|tosa|flatbuffers"
+          # flatbuffers must stay at 24.3.25: tosa-tools wants 25.2.10 and is
+          # installed --no-deps precisely to stop that. See
+          # requirements-arm-tosa.txt.
+          # No grep -q: with pipefail, grep closing the pipe early fails the step.
+          "${PY}" -m pip show flatbuffers | grep "Version: 24.3.25" \
+              || { echo "::error::flatbuffers pin regressed"; exit 1; }
